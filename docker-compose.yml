@@ -1,0 +1,167 @@
+services:
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    environment:
+      - PROMETHEUS_ENV=${ENV:-DEV}
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_LOG_LEVEL=debug
+      - GF_PATHS_CONFIG=/etc/grafana/grafana.ini
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8
+    container_name: gitea-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=gitea
+      - MYSQL_USER=gitea
+      - MYSQL_PASSWORD=gitea
+      - MYSQL_DATABASE=gitea
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gitea:
+    image: gitea/gitea:1.24
+    container_name: gitea
+    env_file:
+      - .env_gitea
+    environment:
+      # Basic settings
+      - USER_UID=1000
+      - USER_GID=1000
+      # Database settings
+      - DB_TYPE=mysql
+      - DB_HOST=mysql:3306
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea
+      # Server settings
+      - SSH_PORT=2222
+      - SSH_LISTEN_PORT=2222
+      # Installation settings
+      - INSTALL_LOCK=true
+      # Actions settings
+      - GITEA__actions__ENABLED=true
+      - GITEA__actions__DEFAULT_ACTIONS_URL=https://gitea.com/actions
+      - GITEA__actions__EXPLORE_URL=https://gitea.com/explore/actions
+      - GITEA__actions__SKIP_CHECKSUM_VERIFICATION=true
+      # Runner settings
+      - GITEA__repository__DEFAULT_ALLOW_CREATE_ORGANIZATION=true
+      - GITEA__repository__ENABLE_PUSH_CREATE_USER=true
+      - GITEA__repository__ENABLE_PUSH_CREATE_ORG=true
+    ports:
+      - "3002:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  act_runner:
+    image: gitea/act_runner:latest
+    container_name: gitea-runner
+    restart: unless-stopped
+    depends_on:
+      gitea:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - act_runner_data:/data
+      - ./workspace:/workspace
+    env_file:
+      - .env_runner
+    environment:
+      - RUNNER_LABELS=ubuntu-latest
+      - RUNNER_NAME=docker-runner
+      - RUNNER_CONTAINER_IMAGE=node:16-bullseye
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - DOCKER_TLS_CERTDIR=
+      - GITEA__runner__ENABLED=true
+      - GITEA__runner__CAPACITY=10
+      - GIT_SSL_NO_VERIFY=true
+      - ACTIONS_RUNNER_HOOK_JOB_STARTED=/data/start.sh
+    user: root
+    networks:
+      - default
+    entrypoint: >
+      /bin/sh -c '
+      mkdir -p /data &&
+      act_runner register --instance $${GITEA_INSTANCE_URL} --token $$GITEA_RUNNER_REGISTRATION_TOKEN --no-interactive &&
+      act_runner daemon
+      '
+
+  redis:
+    image: redis:alpine
+    container_name: gitea-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  gitea_data:
+  mysql_data:
+  redis_data:
+  act_runner_data:
+
+networks:
+  default:
+    name: openai-poc_default

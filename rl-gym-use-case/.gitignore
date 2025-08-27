@@ -1,0 +1,5 @@
+# Backup files
+backups/
+
+# Node modules
+node_modules/

@@ -1,0 +1,51 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run linting
+        run: npm run lint || echo "No lint script found"
+        
+      - name: Run tests
+        run: npm test || echo "No test script found"
+        
+      - name: Build
+        run: npm run build || echo "No build script found"
+
+      - name: Set up Docker
+        run: |
+          # No need for explicit Docker setup in Gitea runners as Docker is typically pre-installed
+          docker info
+
+      - name: Build Docker image
+        run: |
+          docker build -t host.docker.internal:3002/rl-gym-app:${{ github.sha }} .
+          docker build -t host.docker.internal:3002/rl-gym-app:latest .
+
+      - name: Stop old container and run new container
+        run: |
+          # Remove the container using the container name
+          docker rm -f rl-gym-app || echo "Container not found, starting new one"
+
+      - name: Run new container
+        run: |
+          docker run -d --name rl-gym-app --network openai-poc_default -p 3000:3000 host.docker.internal:3002/rl-gym-app:latest

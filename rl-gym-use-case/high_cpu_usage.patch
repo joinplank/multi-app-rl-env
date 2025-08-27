@@ -1,0 +1,70 @@
+diff --git a/src/controllers/dataProcessingJob.ts b/src/controllers/dataProcessingJob.ts
+index d7399ef..4434b1c 100644
+--- a/src/controllers/dataProcessingJob.ts
++++ b/src/controllers/dataProcessingJob.ts
+@@ -2,13 +2,9 @@ export class DataProcessingJob {
+   private static isRunning = false;
+   private static config = {
+     durationInSeconds: 10,
+-    waitInSeconds: 5,
+     intervalInSeconds: 1,
+-    intensity: 1e8,
+   }
+
+-  private static processingDepth = 1;
+-
+   private static mockData = [
+     { id: 1, name: 'Wireless Mouse', price: 100, category: 'electronics' },
+     { id: 2, name: 'The Clean Architecture', price: 50, category: 'books' },
+@@ -24,7 +20,6 @@ export class DataProcessingJob {
+     }
+
+     this.isRunning = true;
+-    this.processingDepth = this.config.intensity;
+     console.log('Starting data processing job...');
+
+     // Start the job cycle
+@@ -38,7 +33,6 @@ export class DataProcessingJob {
+
+     const startTime = Date.now();
+     let processedBatches = 0;
+-    let validationResult = 0;
+
+     const processingInterval = setInterval(() => {
+       if (!this.isRunning) {
+@@ -51,13 +45,13 @@ export class DataProcessingJob {
+       if (elapsed >= this.config.durationInSeconds * 1000) {
+         clearInterval(processingInterval);
+         console.log(`Data processing cycle completed. Processed ${processedBatches} batches.`);
+-        console.log(`Waiting ${this.config.waitInSeconds} seconds before next cycle...`);
++        console.log(`Waiting ${this.config.durationInSeconds} seconds before next cycle...`);
+
+         setTimeout(() => {
+           if (this.isRunning) {
+             this.runJobCycle();
+           }
+-        }, this.config.waitInSeconds * 1000);
++        }, this.config.durationInSeconds * 1000);
+
+         return;
+       }
+@@ -66,11 +60,6 @@ export class DataProcessingJob {
+       this.processDataBatch();
+       processedBatches++;
+     }, this.config.intervalInSeconds * 1000);
+-
+-    // Data validation and quality checks
+-    for (let i = 0; i < this.processingDepth; i++) {
+-      validationResult += Math.sqrt(i) * Math.sin(i) * Math.cos(i) * Math.tan(i);
+-    }
+   }
+
+   private static processDataBatch(): void {
+@@ -137,7 +126,6 @@ export class DataProcessingJob {
+
+     console.log('Stopping data processing job...');
+     this.isRunning = false;
+-    this.processingDepth = 1;
+   }
+
+   static isJobRunning(): boolean {

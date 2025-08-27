@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'rl-gym-app'
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: '^(app_process_cpu_user_seconds_total|app_process_cpu_system_seconds_total|app_process_cpu_seconds_total|process_cpu_user_seconds_total|process_cpu_system_seconds_total|process_cpu_seconds_total).*'
+        action: keep
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
